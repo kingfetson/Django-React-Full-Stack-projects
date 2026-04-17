@@ -21,32 +21,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.sites',  # Required for allauth
     
     # Third party apps
     'rest_framework',
     'rest_framework.authtoken',
-    'rest_framework_simplejwt.token_blacklist',  # For JWT blacklisting
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'allauth.socialaccount.providers.facebook',
-    'dj_rest_auth',
-    'dj_rest_auth.registration',
     
     # Local apps
     'products',
 ]
 
-# Authentication settings
+# Authentication settings - REMOVED allauth
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
-
-SITE_ID = 1
 
 # Custom user model
 AUTH_USER_MODEL = 'products.User'
@@ -58,7 +47,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Changed to AllowAny for development
+        'rest_framework.permissions.AllowAny',
     ],
 }
 
@@ -73,45 +62,13 @@ SIMPLE_JWT = {
 
 # Email settings (for development)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# For production, use:
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = 'noreply@flashcartpro.com'
 
-# Frontend URL (add this if missing)
+# Frontend URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://didactic-umbrella-x54jjv4v7r6h6qwq-3000.app.github.dev')
 
-# Default from email
-DEFAULT_FROM_EMAIL = 'noreply@flashcartpro.com'
-
-# Social Login Settings
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': os.environ.get('GOOGLE_CLIENT_ID', ''),
-            'secret': os.environ.get('GOOGLE_SECRET', ''),
-            'key': ''
-        },
-        'SCOPE': ['profile', 'email'],
-        'AUTH_PARAMS': {'access_type': 'online'},
-    },
-    'facebook': {
-        'APP': {
-            'client_id': os.environ.get('FACEBOOK_APP_ID', ''),
-            'secret': os.environ.get('FACEBOOK_SECRET', ''),
-            'key': ''
-        },
-        'METHOD': 'oauth2',
-        'SCOPE': ['email', 'public_profile'],
-    }
-}
-
-# CORS settings - Combined and fixed
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
@@ -139,7 +96,7 @@ CSRF_TRUSTED_ORIGINS = [
     'https://*.app.github.dev',
 ]
 
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_HTTPONLY = False
 CSRF_USE_SESSIONS = False
 
@@ -156,7 +113,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',  # Add this for allauth
 ]
 
 ROOT_URLCONF = "flashcart_backend.urls"
@@ -209,8 +165,6 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files
 STATIC_URL = "static/"
-
-# Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

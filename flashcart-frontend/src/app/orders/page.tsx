@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Layout from "@/components/Layout";
+import { useAuth } from "@/context/AuthContext";
 
 interface Order {
   id: number;
@@ -28,24 +29,36 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [customerName, setCustomerName] = useState<string | null>(null);
   const router = useRouter();
+  const { user, token } = useAuth();
 
-  useEffect(() => {
-    const customerEmail = localStorage.getItem("customerEmail");
-    if (!customerEmail) {
-      router.push("/orders/login");
-      return;
-    }
-    fetchOrders(customerEmail);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // router is stable, no need to include
-
-  const fetchOrders = async (customerEmail: string) => {
+  const fetchOrders = useCallback(async (email: string) => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      const url = `${apiUrl}/api/orders/?email=${encodeURIComponent(customerEmail)}`;
+      const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
       
-      const response = await fetch(url);
+      if (!authToken) {
+        setError("Please login to view your orders");
+        setLoading(false);
+        return;
+      }
+
+      const url = `${apiUrl}/api/orders/?email=${encodeURIComponent(email)}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
+      
+      if (response.status === 401) {
+        // Token expired, redirect to login
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        router.push('/login');
+        return;
+      }
       
       if (!response.ok) throw new Error("Failed to fetch orders");
       
@@ -57,12 +70,35 @@ export default function OrdersPage() {
       setError(err instanceof Error ? err.message : "Failed to load orders");
       setLoading(false);
     }
-  };
+  }, [token, router]);
+
+  useEffect(() => {
+    // Safely get email from localStorage or user context
+    let email = user?.email;
+    
+    if (!email && typeof window !== 'undefined') {
+      email = localStorage.getItem("customerEmail") ?? undefined;
+      const name = localStorage.getItem("customerName");
+      if (name) setCustomerName(name);
+    }
+    
+    if (email) {
+      fetchOrders(email);
+    } else {
+      router.push("/orders/login");
+    }
+  }, [user, router, fetchOrders]);
 
   const fetchOrderDetails = async (orderId: string) => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetch(`${apiUrl}/api/orders/${orderId}/`);
+      const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+      
+      const response = await fetch(`${apiUrl}/api/orders/${orderId}/`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      });
       
       if (!response.ok) throw new Error("Failed to fetch order details");
       
@@ -96,12 +132,12 @@ export default function OrdersPage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("customerEmail");
-    localStorage.removeItem("customerName");
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem("customerEmail");
+      localStorage.removeItem("customerName");
+    }
     router.push("/orders/login");
   };
-
-  const customerName = localStorage.getItem("customerName");
 
   if (loading) {
     return (

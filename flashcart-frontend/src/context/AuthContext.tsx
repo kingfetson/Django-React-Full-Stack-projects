@@ -29,6 +29,7 @@ interface AuthContextType {
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
+  refreshToken: () => Promise<boolean>;
 }
 
 interface RegisterData {
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(() => getInitialAuthState().user);
   const [token, setToken] = useState<string | null>(() => getInitialAuthState().token);
   const router = useRouter();
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   // Only set axios header when token changes
   useEffect(() => {
@@ -83,7 +85,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token]);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  // Refresh token function
+  const refreshToken = async (): Promise<boolean> => {
+    const refreshTokenValue = localStorage.getItem('refresh_token');
+    if (!refreshTokenValue) return false;
+    
+    try {
+      const response = await axios.post(`${apiUrl}/api/auth/refresh/`, {
+        refresh: refreshTokenValue,
+      });
+      
+      if (response.data.access) {
+        const newAccessToken = response.data.access;
+        localStorage.setItem('access_token', newAccessToken);
+        setToken(newAccessToken);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      return false;
+    }
+  };
+
+  // Helper function to make authenticated requests with auto-refresh
+  const makeAuthenticatedRequest = async <T,>(requestFn: () => Promise<T>, retry = true): Promise<T> => {
+    try {
+      return await requestFn();
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 401 && retry) {
+        // Token expired, try to refresh
+        const refreshed = await refreshToken();
+        if (refreshed) {
+          // Retry the original request with new token
+          return await requestFn();
+        } else {
+          // Refresh failed, redirect to login
+          logout();
+          router.push('/login');
+          throw error;
+        }
+      }
+      throw error;
+    }
+  };
 
   const login = async (email: string, password: string) => {
     try {
@@ -139,13 +186,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
+    delete axios.defaults.headers.common['Authorization'];
     toast.success('Logged out successfully');
     router.push('/');
   };
 
   const updateProfile = async (data: Partial<User>) => {
     try {
-      const response = await axios.put(`${apiUrl}/api/auth/profile/update/`, data);
+      const response = await makeAuthenticatedRequest(() =>
+        axios.put(`${apiUrl}/api/auth/profile/update/`, data)
+      );
       
       if (response.data.success) {
         const updatedUser = { ...user, ...response.data.user } as User;
@@ -161,11 +211,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const changePassword = async (oldPassword: string, newPassword: string) => {
     try {
-      await axios.post(`${apiUrl}/api/auth/change-password/`, {
-        old_password: oldPassword,
-        new_password: newPassword,
-        confirm_password: newPassword
-      });
+      await makeAuthenticatedRequest(() =>
+        axios.post(`${apiUrl}/api/auth/change-password/`, {
+          old_password: oldPassword,
+          new_password: newPassword,
+          confirm_password: newPassword
+        })
+      );
       toast.success('Password changed successfully');
     } catch (error) {
       const axiosError = error as AxiosError<ErrorResponse>;
@@ -212,7 +264,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateProfile,
       changePassword,
       forgotPassword,
-      resetPassword
+      resetPassword,
+      refreshToken
     }}>
       {children}
     </AuthContext.Provider>

@@ -8,18 +8,11 @@ import { useCartStore } from "../store/cartStore";
 export default function Navigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const { user, logout } = useAuth();
   const { getTotalItems } = useCartStore();
   const totalItems = getTotalItems();
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
-  
-  // Track mounted state - suppress ESLint warning
-  useEffect(() => {
-    setMounted(true);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-  }, []);
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -153,13 +146,13 @@ export default function Navigation() {
               </Link>
             )}
 
-            {/* Cart Button - Only render badge on client */}
+            {/* Cart Button */}
             <Link
               href="/cart"
               className="bg-white text-orange-600 px-4 py-2 rounded-lg flex items-center gap-2 font-semibold hover:bg-orange-50 transition-all hover:scale-105 relative"
             >
               🛒 Cart
-              {mounted && totalItems > 0 && (
+              {totalItems > 0 && (
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-bounceIn">
                   {totalItems > 9 ? '9+' : totalItems}
                 </span>
@@ -199,7 +192,7 @@ export default function Navigation() {
                 className="text-white hover:text-orange-100 py-2 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                🛒 Cart {mounted && totalItems > 0 && `(${totalItems})`}
+                🛒 Cart {totalItems > 0 && `(${totalItems})`}
               </Link>
               {user && (
                 <>

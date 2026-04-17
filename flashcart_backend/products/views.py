@@ -20,6 +20,10 @@ import requests
 import json
 import logging
 import traceback
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+
 
 logger = logging.getLogger(__name__)
 
@@ -430,7 +434,17 @@ def verify_payment(request):
         return Response({'error': 'Order not found'}, status=404)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
-
+    
+    
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def refresh_token(request):
+    try:
+        serializer = TokenRefreshSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+    except InvalidToken as e:
+        return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
 @csrf_exempt
 @require_POST
 def paystack_webhook(request):
@@ -461,3 +475,49 @@ def paystack_webhook(request):
                 print(f"Order {order_id} not found")
     
     return JsonResponse({'status': 'success'}, status=200)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_order_detail(request, order_id):
+    try:
+        order = Order.objects.get(order_id=order_id)
+        
+        # Check if user has permission to view this order
+        if request.user.role != 'admin' and not request.user.is_superuser and order.user != request.user:
+            return Response({
+                'error': 'Permission denied'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = OrderSerializer(order)
+        return Response(serializer.data)
+    except Order.DoesNotExist:
+        return Response({
+            'error': 'Order not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_top_products(request):
+    """Get top selling products (admin only)"""
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({'error': 'Permission denied'}, status=403)
+    
+    from django.db.models import Sum, F
+    top_products = OrderItem.objects.values('product_name').annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum(F('quantity') * F('price'))
+    ).order_by('-total_quantity')[:10]
+    
+    return Response(top_products)     
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_users(request):
+    """Get all users (admin only)"""
+    # Only admin can access this
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({
+            'error': 'Permission denied'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    users = User.objects.all()
+    serializer = UserSerializer(users, many=True)
+    return Response(serializer.data)

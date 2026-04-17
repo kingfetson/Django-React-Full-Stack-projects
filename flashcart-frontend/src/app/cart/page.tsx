@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useCartStore } from "../../store/cartStore";
 import PaystackPayment from "@/components/PaystackPayment";
+import { useAuth } from "@/context/AuthContext";
 
 // Define the order type
 interface Order {
@@ -14,6 +16,8 @@ interface Order {
 }
 
 export default function CartPage() {
+  const router = useRouter();
+  const { user } = useAuth(); // Remove isAuthenticated
   const {
     cart,
     removeFromCart,
@@ -38,7 +42,17 @@ export default function CartPage() {
 
   useEffect(() => {
     loadCart();
-  }, [loadCart]);
+    
+    // Pre-fill shipping info if user is logged in
+    if (user) {
+      setShippingInfo(prev => ({
+        ...prev,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        email: user.email,
+        phone: user.phone || '',
+      }));
+    }
+  }, [loadCart, user]);
 
   const totalPrice = getTotalPrice();
   const shipping = totalPrice > 5000 ? 0 : 299;
@@ -49,6 +63,14 @@ export default function CartPage() {
     // Validate shipping info
     if (!shippingInfo.name || !shippingInfo.email || !shippingInfo.address || !shippingInfo.city) {
       alert("Please fill in all required fields");
+      return false;
+    }
+
+    // Check if user is logged in
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      alert("Please login to place an order");
+      router.push('/login');
       return false;
     }
 
@@ -69,15 +91,21 @@ export default function CartPage() {
       }))
     };
 
+    console.log("Creating order with data:", orderData);
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/api/create-order/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify(orderData),
       });
 
       const result = await response.json();
+      console.log("Order creation response:", result);
 
       if (result.success) {
         // Store customer email and name for orders page
@@ -92,7 +120,7 @@ export default function CartPage() {
         setShowPayment(true);
         return true;
       } else {
-        alert(`Failed to create order: ${result.error}`);
+        alert(`Failed to create order: ${result.error || result.message || "Unknown error"}`);
         return false;
       }
     } catch (error) {
@@ -105,35 +133,26 @@ export default function CartPage() {
   };
 
   const handlePaymentSuccess = async (reference: string) => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetch(`${apiUrl}/api/verify-payment/?reference=${reference}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        alert(`Payment successful! Your order ${result.order_id} is now being processed.`);
-        clearCart();
-        setShowPayment(false);
-        setCurrentOrder(null);
-        // Reset shipping form
-        setShippingInfo({
-          name: "",
-          email: "",
-          phone: "",
-          address: "",
-          city: "",
-          postalCode: "",
-        });
-        // Redirect to order confirmation page
-        window.location.href = `/order-confirmation?order_id=${result.order_id}`;
-      } else {
-        alert("Payment verification failed. Please contact support.");
-      }
-    } catch (error) {
-      console.error("Verification error:", error);
-      alert("Error verifying payment. Please contact support.");
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    const response = await fetch(`${apiUrl}/api/verify-payment/?reference=${reference}`);
+    const result = await response.json();
+    
+    if (result.success) {
+      alert(`Payment successful! Your order ${result.order_id} is now being processed.`);
+      clearCart();
+      setShowPayment(false);
+      setCurrentOrder(null);
+      // Redirect to order confirmation page instead of home
+      router.push(`/order-confirmation?order_id=${result.order_id}`);
+    } else {
+      alert("Payment verification failed. Please contact support.");
     }
-  };
+  } catch (error) {
+    console.error("Verification error:", error);
+    alert("Error verifying payment. Please contact support.");
+  }
+};
 
   const handlePaymentClose = () => {
     setShowPayment(false);
@@ -315,6 +334,17 @@ export default function CartPage() {
                       className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
                     />
                   </div>
+
+                  {!user && (
+                    <div className="mt-3 text-center">
+                      <p className="text-sm text-gray-600">
+                        Already have an account?{" "}
+                        <Link href="/login" className="text-orange-600 hover:underline">
+                          Login
+                        </Link>
+                      </p>
+                    </div>
+                  )}
 
                   <button
                     onClick={createOrder}
