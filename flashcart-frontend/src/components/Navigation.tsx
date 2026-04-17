@@ -102,6 +102,14 @@ export default function Navigation() {
                 
                 {isUserMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50 animate-fadeIn">
+                    {/* Customer Dashboard Link */}
+                    <Link
+                      href="/customer"
+                      className="block px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      📊 My Dashboard
+                    </Link>
                     <Link
                       href="/profile"
                       className="block px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
@@ -196,6 +204,13 @@ export default function Navigation() {
               </Link>
               {user && (
                 <>
+                  <Link 
+                    href="/customer" 
+                    className="text-white hover:text-orange-100 py-2 transition-colors"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    📊 My Dashboard
+                  </Link>
                   <Link 
                     href="/orders" 
                     className="text-white hover:text-orange-100 py-2 transition-colors"

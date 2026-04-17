@@ -41,7 +41,11 @@ export default function AdminSettings() {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await response.json();
-      setSettings(data);
+      // Ensure payment_methods is always an array
+      setSettings({
+        ...data,
+        payment_methods: data.payment_methods || [],
+      });
     } catch (error) {
       console.error("Error fetching settings:", error);
       toast.error("Failed to load settings");
@@ -83,14 +87,14 @@ export default function AdminSettings() {
     }
   };
 
-  // Fixed: Replaced 'any' with proper union type
   const updateSetting = (key: string, value: string | number | boolean | string[]) => {
     setSettings(prev => prev ? { ...prev, [key]: value } : null);
   };
 
+  // Fixed: Add safety check for payment_methods
   const togglePaymentMethod = (method: string) => {
     if (!settings) return;
-    const current = settings.payment_methods;
+    const current = settings.payment_methods || []; // Add fallback empty array
     const updated = current.includes(method)
       ? current.filter(m => m !== method)
       : [...current, method];
@@ -287,7 +291,7 @@ export default function AdminSettings() {
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={settings.payment_methods.includes("paystack")}
+                    checked={(settings.payment_methods || []).includes("paystack")}
                     onChange={() => togglePaymentMethod("paystack")}
                     className="w-4 h-4 text-orange-600 focus:ring-orange-500"
                   />
@@ -298,7 +302,7 @@ export default function AdminSettings() {
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={settings.payment_methods.includes("mpesa")}
+                    checked={(settings.payment_methods || []).includes("mpesa")}
                     onChange={() => togglePaymentMethod("mpesa")}
                     className="w-4 h-4 text-orange-600 focus:ring-orange-500"
                   />
@@ -309,7 +313,7 @@ export default function AdminSettings() {
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={settings.payment_methods.includes("card")}
+                    checked={(settings.payment_methods || []).includes("card")}
                     onChange={() => togglePaymentMethod("card")}
                     className="w-4 h-4 text-orange-600 focus:ring-orange-500"
                   />
