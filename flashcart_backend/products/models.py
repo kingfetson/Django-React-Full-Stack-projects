@@ -42,19 +42,12 @@ class User(AbstractUser):
     email_verified = models.BooleanField(default=False)
     reset_token = models.CharField(max_length=100, blank=True, null=True)
     
-    # Remove the username field
     username = None
-    
-    # Make email required and unique
     email = models.EmailField(unique=True)
     
-    # Set email as the USERNAME_FIELD
     USERNAME_FIELD = 'email'
-    
-    # Fields required when creating a user
     REQUIRED_FIELDS = ['first_name', 'last_name']
     
-    # Use the custom manager
     objects = UserManager()
     
     def __str__(self):
@@ -124,3 +117,85 @@ class OrderItem(models.Model):
     
     def __str__(self):
         return f"{self.product_name} x {self.quantity}"
+
+class Coupon(models.Model):
+    DISCOUNT_TYPE_CHOICES = [
+        ('percentage', 'Percentage (%)'),
+        ('fixed', 'Fixed Amount (KES)'),
+    ]
+    
+    code = models.CharField(max_length=50, unique=True)
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES, default='percentage')
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2)
+    min_order_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    
+    valid_from = models.DateTimeField()
+    valid_to = models.DateTimeField()
+    
+    usage_limit = models.IntegerField(default=1)
+    used_count = models.IntegerField(default=0)
+    per_user_limit = models.IntegerField(default=1)
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.code} - {self.discount_value}{'%' if self.discount_type == 'percentage' else ' KES'}"
+    
+    @property
+    def is_valid(self):
+        from django.utils import timezone
+        now = timezone.now()
+        return (self.is_active and 
+                self.valid_from <= now <= self.valid_to and 
+                self.used_count < self.usage_limit)
+    
+    class Meta:
+        ordering = ['-created_at']
+
+class StoreSettings(models.Model):
+    """Store configuration settings"""
+    
+    # Store Information
+    store_name = models.CharField(max_length=100, default='FlashCart Pro')
+    store_email = models.EmailField(default='info@flashcartpro.com')
+    store_phone = models.CharField(max_length=20, default='+254 700 123 456')
+    store_address = models.TextField(default='Nairobi, Kenya')
+    store_description = models.TextField(blank=True)
+    store_logo = models.URLField(blank=True)
+    
+    # Shipping Settings
+    free_shipping_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=5000)
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=299)
+    
+    # Tax Settings
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=16.00)
+    
+    # Payment Settings
+    payment_methods = models.JSONField(default=list)
+    currency = models.CharField(max_length=3, default='KES')
+    
+    # Order Settings
+    order_prefix = models.CharField(max_length=10, default='ORD')
+    auto_confirm_order = models.BooleanField(default=False)
+    
+    # Notification Settings
+    send_order_confirmation = models.BooleanField(default=True)
+    send_payment_confirmation = models.BooleanField(default=True)
+    send_shipping_update = models.BooleanField(default=True)
+    
+    # Social Media Links
+    facebook_url = models.URLField(blank=True)
+    twitter_url = models.URLField(blank=True)
+    instagram_url = models.URLField(blank=True)
+    
+    # Meta
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name_plural = "Store Settings"
+    
+    def __str__(self):
+        return self.store_name

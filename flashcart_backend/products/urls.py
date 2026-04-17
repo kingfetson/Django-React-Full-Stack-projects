@@ -16,6 +16,8 @@ urlpatterns = [
     
     # Product endpoints
     path('products/', views.get_products, name='get-products'),
+    path('products/create/', views.create_product, name='create-product'),  # Add this
+    path('products/<int:product_id>/', views.product_detail, name='product-detail'),  # Add this
     
     # Order endpoints
     path('create-order/', views.create_order, name='create-order'),
@@ -23,11 +25,16 @@ urlpatterns = [
     path('orders/<str:order_id>/', views.get_order_detail, name='order-detail'),
     path('orders/<str:order_id>/status/', views.update_order_status, name='update-status'),
     
-    # User management endpoint (admin only)
-    path('users/', views.get_users, name='get-users'),  # Add this line
-    
+    # User management endpoint
+    path('users/', views.get_users, name='get-users'),
+    path('settings/', views.store_settings, name='store-settings'),
     # Paystack payment endpoints
     path('initialize-payment/', views.initialize_payment, name='initialize-payment'),
     path('verify-payment/', views.verify_payment, name='verify-payment'),
     path('paystack-webhook/', views.paystack_webhook, name='paystack-webhook'),
+    
+    # Coupon endpoints
+    path('coupons/', views.coupons, name='coupons'),
+    path('coupons/<int:coupon_id>/', views.coupon_detail, name='coupon-detail'),
+    path('validate-coupon/', views.validate_coupon, name='validate-coupon'),
 ]

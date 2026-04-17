@@ -54,11 +54,16 @@ export default function AdminProducts() {
     e.preventDefault();
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      // Note: You'll need to create these API endpoints in Django
-      const url = editingProduct 
-        ? `${apiUrl}/api/products/${editingProduct.id}/` 
-        : `${apiUrl}/api/products/`;
-      const method = editingProduct ? "PUT" : "POST";
+      let url = `${apiUrl}/api/products/`;
+      let method = "POST";
+      
+      if (editingProduct) {
+        url = `${apiUrl}/api/products/${editingProduct.id}/`;
+        method = "PUT";
+      } else {
+        url = `${apiUrl}/api/products/create/`;
+        method = "POST";
+      }
       
       const response = await fetch(url, {
         method,
@@ -66,7 +71,14 @@ export default function AdminProducts() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          price: parseFloat(formData.price),
+          description: formData.description,
+          image: formData.image,
+          category: formData.category,
+          stock: parseInt(formData.stock),
+        }),
       });
       
       if (response.ok) {
@@ -75,7 +87,8 @@ export default function AdminProducts() {
         setShowModal(false);
         resetForm();
       } else {
-        toast.error("Failed to save product");
+        const error = await response.json();
+        toast.error(error.error || error.message || "Failed to save product");
       }
     } catch (error) {
       console.error("Error saving product:", error);
@@ -96,7 +109,8 @@ export default function AdminProducts() {
         toast.success("Product deleted");
         fetchProducts();
       } else {
-        toast.error("Failed to delete product");
+        const error = await response.json();
+        toast.error(error.error || "Failed to delete product");
       }
     } catch (error) {
       console.error("Error deleting product:", error);
@@ -199,13 +213,72 @@ export default function AdminProducts() {
                 <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-500 hover:text-gray-700">✕</button>
               </div>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block text-sm font-medium mb-1">Name</label><input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 border rounded-lg" required /></div>
-                <div><label className="block text-sm font-medium mb-1">Price</label><input type="number" step="0.01" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} className="w-full px-3 py-2 border rounded-lg" required /></div>
-                <div><label className="block text-sm font-medium mb-1">Description</label><textarea rows={3} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 border rounded-lg" required /></div>
-                <div><label className="block text-sm font-medium mb-1">Image URL</label><input type="url" value={formData.image} onChange={(e) => setFormData({...formData, image: e.target.value})} className="w-full px-3 py-2 border rounded-lg" required /></div>
-                <div><label className="block text-sm font-medium mb-1">Category</label><input type="text" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 border rounded-lg" /></div>
-                <div><label className="block text-sm font-medium mb-1">Stock</label><input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: e.target.value})} className="w-full px-3 py-2 border rounded-lg" required /></div>
-                <button type="submit" className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700">{editingProduct ? "Update" : "Create"}</button>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Name *</label>
+                  <input 
+                    type="text" 
+                    value={formData.name} 
+                    onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Price (KES) *</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    value={formData.price} 
+                    onChange={(e) => setFormData({...formData, price: e.target.value})} 
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Description *</label>
+                  <textarea 
+                    rows={3} 
+                    value={formData.description} 
+                    onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Image URL *</label>
+                  <input 
+                    type="url" 
+                    value={formData.image} 
+                    onChange={(e) => setFormData({...formData, image: e.target.value})} 
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Category</label>
+                  <input 
+                    type="text" 
+                    value={formData.category} 
+                    onChange={(e) => setFormData({...formData, category: e.target.value})} 
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Stock *</label>
+                  <input 
+                    type="number" 
+                    value={formData.stock} 
+                    onChange={(e) => setFormData({...formData, stock: e.target.value})} 
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none" 
+                    required 
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition"
+                >
+                  {editingProduct ? "Update Product" : "Create Product"}
+                </button>
               </form>
             </div>
           </div>

@@ -10,21 +10,20 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, get_user_model
 from django.utils.crypto import get_random_string
-from .models import Product, Order, OrderItem
+from .models import Product, Order, OrderItem, Coupon
 from .serializers import (
     ProductSerializer, OrderSerializer, CreateOrderSerializer,
     UserSerializer, RegisterSerializer, ChangePasswordSerializer,
-    ForgotPasswordSerializer, ResetPasswordSerializer
+    ForgotPasswordSerializer, ResetPasswordSerializer, CouponSerializer
 )
 import requests
 import json
 import logging
 import traceback
-from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-
-
+from .models import StoreSettings
+from .serializers import StoreSettingsSerializer
 logger = logging.getLogger(__name__)
 
 # Import Paystack libraries
@@ -217,10 +216,52 @@ def get_products(request):
     serializer = ProductSerializer(products, many=True)
     return Response(serializer.data)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_product(request):
+    """Create a new product (admin only)"""
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    serializer = ProductSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save(created_by=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def product_detail(request, product_id):
+    """Get, update or delete a specific product"""
+    try:
+        product = Product.objects.get(id=product_id)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Only admin can modify products
+    if request.method in ['PUT', 'DELETE']:
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if request.method == 'GET':
+        serializer = ProductSerializer(product)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT':
+        serializer = ProductSerializer(product, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        product.delete()
+        return Response({'message': 'Product deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+
 # ==================== ORDER VIEWS ====================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])  # Changed from AllowAny to IsAuthenticated
+@permission_classes([IsAuthenticated])
 def create_order(request):
     serializer = CreateOrderSerializer(data=request.data)
     
@@ -228,7 +269,7 @@ def create_order(request):
         try:
             # Create order with user association
             order = Order.objects.create(
-                user=request.user,  # Associate with logged-in user
+                user=request.user,
                 customer_name=serializer.validated_data['customer_name'],
                 customer_email=serializer.validated_data['customer_email'],
                 customer_phone=serializer.validated_data.get('customer_phone', ''),
@@ -434,8 +475,7 @@ def verify_payment(request):
         return Response({'error': 'Order not found'}, status=404)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
-    
-    
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def refresh_token(request):
@@ -445,6 +485,7 @@ def refresh_token(request):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
     except InvalidToken as e:
         return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+
 @csrf_exempt
 @require_POST
 def paystack_webhook(request):
@@ -476,24 +517,21 @@ def paystack_webhook(request):
     
     return JsonResponse({'status': 'success'}, status=200)
 
+# ==================== USER MANAGEMENT VIEWS ====================
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def get_order_detail(request, order_id):
-    try:
-        order = Order.objects.get(order_id=order_id)
-        
-        # Check if user has permission to view this order
-        if request.user.role != 'admin' and not request.user.is_superuser and order.user != request.user:
-            return Response({
-                'error': 'Permission denied'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        serializer = OrderSerializer(order)
-        return Response(serializer.data)
-    except Order.DoesNotExist:
+def get_users(request):
+    """Get all users (admin only)"""
+    if request.user.role != 'admin' and not request.user.is_superuser:
         return Response({
-            'error': 'Order not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+            'error': 'Permission denied'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    users = User.objects.all()
+    serializer = UserSerializer(users, many=True)
+    return Response(serializer.data)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_top_products(request):
@@ -507,17 +545,122 @@ def get_top_products(request):
         total_revenue=Sum(F('quantity') * F('price'))
     ).order_by('-total_quantity')[:10]
     
-    return Response(top_products)     
-@api_view(['GET'])
+    return Response(top_products)
+
+# ==================== COUPON VIEWS ====================
+
+@api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
-def get_users(request):
-    """Get all users (admin only)"""
-    # Only admin can access this
+def coupons(request):
+    """Get all coupons or create a new coupon (admin only)"""
     if request.user.role != 'admin' and not request.user.is_superuser:
-        return Response({
-            'error': 'Permission denied'
-        }, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
     
-    users = User.objects.all()
-    serializer = UserSerializer(users, many=True)
-    return Response(serializer.data)
+    if request.method == 'GET':
+        coupons = Coupon.objects.all()
+        serializer = CouponSerializer(coupons, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        serializer = CouponSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def coupon_detail(request, coupon_id):
+    """Get, update or delete a specific coupon (admin only)"""
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        coupon = Coupon.objects.get(id=coupon_id)
+    except Coupon.DoesNotExist:
+        return Response({'error': 'Coupon not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    if request.method == 'GET':
+        serializer = CouponSerializer(coupon)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT':
+        serializer = CouponSerializer(coupon, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        coupon.delete()
+        return Response({'message': 'Coupon deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def validate_coupon(request):
+    """Validate a coupon code (public endpoint)"""
+    code = request.data.get('code', '').upper()
+    order_total = float(request.data.get('order_total', 0))
+    
+    try:
+        coupon = Coupon.objects.get(code=code, is_active=True)
+    except Coupon.DoesNotExist:
+        return Response({'valid': False, 'error': 'Invalid coupon code'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check validity
+    from django.utils import timezone
+    now = timezone.now()
+    
+    if not coupon.is_active:
+        return Response({'valid': False, 'error': 'Coupon is inactive'})
+    
+    if coupon.valid_from > now:
+        return Response({'valid': False, 'error': f'Coupon valid from {coupon.valid_from.strftime("%Y-%m-%d")}'})
+    
+    if coupon.valid_to < now:
+        return Response({'valid': False, 'error': 'Coupon has expired'})
+    
+    if coupon.used_count >= coupon.usage_limit:
+        return Response({'valid': False, 'error': 'Coupon usage limit reached'})
+    
+    if order_total < coupon.min_order_amount:
+        return Response({'valid': False, 'error': f'Minimum order amount of KES {coupon.min_order_amount} required'})
+    
+    # Calculate discount
+    if coupon.discount_type == 'percentage':
+        discount = (coupon.discount_value / 100) * order_total
+        if coupon.max_discount:
+            discount = min(discount, coupon.max_discount)
+    else:
+        discount = min(coupon.discount_value, order_total)
+    
+    return Response({
+        'valid': True,
+        'code': coupon.code,
+        'discount_type': coupon.discount_type,
+        'discount_value': coupon.discount_value,
+        'discount_amount': round(discount, 2),
+        'message': f'Coupon applied! You saved KES {round(discount, 2)}'
+    })
+    # ==================== SETTINGS VIEWS ====================
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def store_settings(request):
+    """Get or update store settings (admin only)"""
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Get or create settings
+    settings_obj, created = StoreSettings.objects.get_or_create(id=1)
+    
+    if request.method == 'GET':
+        serializer = StoreSettingsSerializer(settings_obj)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT':
+        serializer = StoreSettingsSerializer(settings_obj, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

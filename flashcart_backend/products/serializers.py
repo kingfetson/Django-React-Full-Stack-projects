@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Product, Order, OrderItem
+from .models import Product, Order, OrderItem, Coupon, StoreSettings  # Add StoreSettings import
 
 User = get_user_model()
 
@@ -91,3 +91,18 @@ class CreateOrderSerializer(serializers.Serializer):
         child=serializers.DictField(),
         write_only=True
     )
+
+# Coupon Serializer
+class CouponSerializer(serializers.ModelSerializer):
+    is_valid = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = Coupon
+        fields = '__all__'
+        read_only_fields = ['used_count', 'created_at', 'updated_at']
+
+# Store Settings Serializer
+class StoreSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreSettings
+        fields = '__all__'
