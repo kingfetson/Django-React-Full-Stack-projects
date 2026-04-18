@@ -42,12 +42,19 @@ class User(AbstractUser):
     email_verified = models.BooleanField(default=False)
     reset_token = models.CharField(max_length=100, blank=True, null=True)
     
+    # Remove the username field
     username = None
+    
+    # Make email required and unique
     email = models.EmailField(unique=True)
     
+    # Set email as the USERNAME_FIELD
     USERNAME_FIELD = 'email'
+    
+    # Fields required when creating a user
     REQUIRED_FIELDS = ['first_name', 'last_name']
     
+    # Use the custom manager
     objects = UserManager()
     
     def __str__(self):
@@ -199,3 +206,39 @@ class StoreSettings(models.Model):
     
     def __str__(self):
         return self.store_name
+
+# ==================== REVIEW MODEL ====================
+class Review(models.Model):
+    """Product reviews and ratings"""
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews')
+    rating = models.IntegerField(choices=[(1, '1 Star'), (2, '2 Stars'), (3, '3 Stars'), (4, '4 Stars'), (5, '5 Stars')])
+    title = models.CharField(max_length=200)
+    comment = models.TextField()
+    verified_purchase = models.BooleanField(default=False)
+    helpful_count = models.IntegerField(default=0)
+    helpful_votes = models.ManyToManyField(User, related_name='helpful_reviews', blank=True)
+    is_approved = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['product', 'user']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.product.name} - {self.rating}★"
+
+# ==================== WISHLIST MODEL ====================
+class Wishlist(models.Model):
+    """User wishlist items"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wishlist')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='wishlisted_by')
+    added_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['user', 'product']
+        ordering = ['-added_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.product.name}"

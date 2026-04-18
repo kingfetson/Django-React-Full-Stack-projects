@@ -5,6 +5,7 @@ import Image from "next/image";
 import AdminLayout from "@/components/AdminLayout";
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
+import ProductReviews from "@/components/ProductReviews";
 
 interface Product {
   id: number;
@@ -285,5 +286,6 @@ export default function AdminProducts() {
         </div>
       )}
     </AdminLayout>
+    <ProductReviews productId={product.id} />
   );
 }

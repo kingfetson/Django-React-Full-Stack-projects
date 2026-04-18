@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Product, Order, OrderItem, Coupon, StoreSettings  # Add StoreSettings import
+from .models import Product, Order, OrderItem, Coupon, StoreSettings, Review, Wishlist  
 
 User = get_user_model()
 
@@ -101,8 +101,52 @@ class CouponSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['used_count', 'created_at', 'updated_at']
 
+# Review Serializer
+class ReviewSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.first_name', read_only=True)
+    user_avatar = serializers.CharField(source='user.avatar', read_only=True)
+    is_owner = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Review
+        fields = ['id', 'product', 'user', 'user_name', 'user_avatar', 'rating', 'title', 
+                  'comment', 'verified_purchase', 'helpful_count', 'is_approved', 
+                  'created_at', 'updated_at', 'is_owner']
+        read_only_fields = ['verified_purchase', 'helpful_count', 'is_approved', 'created_at', 'updated_at']
+    
+    def get_is_owner(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.user == request.user
+        return False
+    
+    def create(self, validated_data):
+        validated_data['verified_purchase'] = self._check_verified_purchase(validated_data['user'], validated_data['product'])
+        return super().create(validated_data)
+    
+    def _check_verified_purchase(self, user, product):
+        """Check if user has purchased this product"""
+        from .models import OrderItem
+        return OrderItem.objects.filter(
+            order__user=user,
+            order__payment_status='paid',
+            product=product
+        ).exists()
+
 # Store Settings Serializer
 class StoreSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreSettings
         fields = '__all__'
+
+# Wishlist Serializer - Must be at the same indentation level as other classes
+class WishlistSerializer(serializers.ModelSerializer):
+    product_id = serializers.IntegerField(source='product.id', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_price = serializers.DecimalField(source='product.price', read_only=True, max_digits=10, decimal_places=2)
+    product_image = serializers.CharField(source='product.image', read_only=True)
+    
+    class Meta:
+        model = Wishlist
+        fields = ['id', 'user', 'product', 'product_id', 'product_name', 'product_price', 'product_image', 'added_at']
+        read_only_fields = ['added_at']

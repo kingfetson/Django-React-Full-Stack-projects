@@ -1,8 +1,9 @@
-
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useCartStore } from "../store/cartStore";
+import WishlistButton from "./WishlistButton";
 
 type Product = {
   id: number;
@@ -37,11 +38,14 @@ export default function ProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-4 hover:shadow-xl transition-all transform hover:-translate-y-1">
-      <div className="w-full h-40 mb-3 overflow-hidden rounded-lg bg-gray-200">
-        <picture>
-          <source srcSet={getImageSrc()} type="image/webp" />
-          <source srcSet={getImageSrc()} type="image/jpeg" />
+    <div className="bg-white rounded-xl shadow-md p-4 hover:shadow-xl transition-all transform hover:-translate-y-1 relative">
+      {/* Wishlist Button */}
+      <div className="absolute top-2 right-2 z-10">
+        <WishlistButton productId={product.id} className="text-2xl" />
+      </div>
+
+      <Link href={`/product/${product.id}`}>
+        <div className="relative w-full h-40 mb-3 overflow-hidden rounded-lg bg-gray-200">
           <img
             src={getImageSrc()}
             alt={product.name}
@@ -49,12 +53,12 @@ export default function ProductCard({ product }: { product: Product }) {
             onError={() => setImgError(true)}
             loading="lazy"
           />
-        </picture>
-      </div>
+        </div>
 
-      <h2 className="text-lg font-semibold line-clamp-1">{product.name}</h2>
-      <p className="text-gray-600 text-sm mb-2 line-clamp-2">{product.description}</p>
-      <p className="text-green-600 font-bold mb-3">KES {product.price}</p>
+        <h2 className="text-lg font-semibold line-clamp-1">{product.name}</h2>
+        <p className="text-gray-600 text-sm mb-2 line-clamp-2">{product.description}</p>
+        <p className="text-green-600 font-bold mb-3">KES {product.price}</p>
+      </Link>
 
       <div className="flex items-center gap-2 mb-3">
         <button

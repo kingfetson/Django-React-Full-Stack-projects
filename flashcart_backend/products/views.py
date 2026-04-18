@@ -10,11 +10,12 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, get_user_model
 from django.utils.crypto import get_random_string
-from .models import Product, Order, OrderItem, Coupon
+from .models import Product, Order, OrderItem, Coupon, StoreSettings, Review
 from .serializers import (
     ProductSerializer, OrderSerializer, CreateOrderSerializer,
     UserSerializer, RegisterSerializer, ChangePasswordSerializer,
-    ForgotPasswordSerializer, ResetPasswordSerializer, CouponSerializer
+    ForgotPasswordSerializer, ResetPasswordSerializer, CouponSerializer,
+    StoreSettingsSerializer, ReviewSerializer, WishlistSerializer
 )
 import requests
 import json
@@ -22,8 +23,8 @@ import logging
 import traceback
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
-from .models import StoreSettings
-from .serializers import StoreSettingsSerializer
+from .models import Wishlist
+from .serializers import WishlistSerializer
 logger = logging.getLogger(__name__)
 
 # Import Paystack libraries
@@ -257,6 +258,119 @@ def product_detail(request, product_id):
     elif request.method == 'DELETE':
         product.delete()
         return Response({'message': 'Product deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+
+# ==================== REVIEW VIEWS ====================
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def product_reviews(request, product_id):
+    """Get all reviews for a product or create a new review"""
+    try:
+        product = Product.objects.get(id=product_id)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    if request.method == 'GET':
+        reviews = product.reviews.filter(is_approved=True)
+        serializer = ReviewSerializer(reviews, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        if not request.user.is_authenticated:
+            return Response({'error': 'Please login to leave a review'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Check if user already reviewed this product
+        if Review.objects.filter(product=product, user=request.user).exists():
+            return Response({'error': 'You have already reviewed this product'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = request.data.copy()
+        data['product'] = product.id
+        data['user'] = request.user.id
+        
+        serializer = ReviewSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def review_detail(request, review_id):
+    """Update or delete a review (owner only)"""
+    try:
+        review = Review.objects.get(id=review_id)
+    except Review.DoesNotExist:
+        return Response({'error': 'Review not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check if user is the owner or admin
+    if review.user != request.user and request.user.role != 'admin':
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if request.method == 'PUT':
+        serializer = ReviewSerializer(review, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        review.delete()
+        return Response({'message': 'Review deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def helpful_review(request, review_id):
+    """Mark a review as helpful"""
+    try:
+        review = Review.objects.get(id=review_id)
+    except Review.DoesNotExist:
+        return Response({'error': 'Review not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    user = request.user
+    
+    if user in review.helpful_votes.all():
+        # Remove helpful vote
+        review.helpful_votes.remove(user)
+        review.helpful_count -= 1
+        review.save()
+        return Response({'helpful': False, 'count': review.helpful_count})
+    else:
+        # Add helpful vote
+        review.helpful_votes.add(user)
+        review.helpful_count += 1
+        review.save()
+        return Response({'helpful': True, 'count': review.helpful_count})
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def product_rating_summary(request, product_id):
+    """Get rating summary for a product"""
+    try:
+        product = Product.objects.get(id=product_id)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    reviews = product.reviews.filter(is_approved=True)
+    total_reviews = reviews.count()
+    
+    if total_reviews == 0:
+        return Response({
+            'average_rating': 0,
+            'total_reviews': 0,
+            'rating_distribution': {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        })
+    
+    average_rating = sum([r.rating for r in reviews]) / total_reviews
+    
+    rating_distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    for review in reviews:
+        rating_distribution[review.rating] += 1
+    
+    return Response({
+        'average_rating': round(average_rating, 1),
+        'total_reviews': total_reviews,
+        'rating_distribution': rating_distribution
+    })
 
 # ==================== ORDER VIEWS ====================
 
@@ -642,7 +756,8 @@ def validate_coupon(request):
         'discount_amount': round(discount, 2),
         'message': f'Coupon applied! You saved KES {round(discount, 2)}'
     })
-    # ==================== SETTINGS VIEWS ====================
+
+# ==================== SETTINGS VIEWS ====================
 
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
@@ -650,7 +765,67 @@ def store_settings(request):
     """Get or update store settings (admin only)"""
     if request.user.role != 'admin' and not request.user.is_superuser:
         return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+ # ==================== WISHLIST VIEWS ====================
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def wishlist(request):
+    """Get user's wishlist or add item to wishlist"""
+    user = request.user
     
+    if request.method == 'GET':
+        wishlist_items = Wishlist.objects.filter(user=user)
+        serializer = WishlistSerializer(wishlist_items, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        product_id = request.data.get('product_id')
+        
+        try:
+            product = Product.objects.get(id=product_id)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if already in wishlist
+        if Wishlist.objects.filter(user=user, product=product).exists():
+            return Response({'error': 'Product already in wishlist'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        wishlist_item = Wishlist.objects.create(user=user, product=product)
+        serializer = WishlistSerializer(wishlist_item)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def wishlist_remove(request, product_id):
+    """Remove item from wishlist"""
+    user = request.user
+    
+    try:
+        wishlist_item = Wishlist.objects.get(user=user, product_id=product_id)
+        wishlist_item.delete()
+        return Response({'message': 'Item removed from wishlist'}, status=status.HTTP_204_NO_CONTENT)
+    except Wishlist.DoesNotExist:
+        return Response({'error': 'Item not found in wishlist'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_wishlist(request, product_id):
+    """Toggle product in wishlist (add if not exists, remove if exists)"""
+    user = request.user
+    
+    try:
+        product = Product.objects.get(id=product_id)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    wishlist_item = Wishlist.objects.filter(user=user, product=product)
+    
+    if wishlist_item.exists():
+        wishlist_item.delete()
+        return Response({'added': False, 'message': 'Removed from wishlist'})
+    else:
+        Wishlist.objects.create(user=user, product=product)
+        return Response({'added': True, 'message': 'Added to wishlist'})   
     # Get or create settings
     settings_obj, created = StoreSettings.objects.get_or_create(id=1)
     

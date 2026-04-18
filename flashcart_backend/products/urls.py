@@ -37,4 +37,13 @@ urlpatterns = [
     path('coupons/', views.coupons, name='coupons'),
     path('coupons/<int:coupon_id>/', views.coupon_detail, name='coupon-detail'),
     path('validate-coupon/', views.validate_coupon, name='validate-coupon'),
+    # Wishlist endpoints
+    path('wishlist/', views.wishlist, name='wishlist'),
+    path('wishlist/<int:product_id>/remove/', views.wishlist_remove, name='wishlist-remove'),
+    path('wishlist/<int:product_id>/toggle/', views.toggle_wishlist, name='toggle-wishlist'),
+    # Review endpoints
+    path('products/<int:product_id>/reviews/', views.product_reviews, name='product-reviews'),
+    path('reviews/<int:review_id>/', views.review_detail, name='review-detail'),
+    path('reviews/<int:review_id>/helpful/', views.helpful_review, name='helpful-review'),
+    path('products/<int:product_id>/rating-summary/', views.product_rating_summary, name='product-rating-summary'),
 ]
