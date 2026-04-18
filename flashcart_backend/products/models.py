@@ -61,14 +61,21 @@ class User(AbstractUser):
         return self.email
 
 class Product(models.Model):
-    name = models.CharField(max_length=255)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    name = models.CharField(max_length=255, db_index=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, db_index=True)
     description = models.TextField()
     image = models.URLField()
-    category = models.CharField(max_length=50, blank=True, null=True)
-    stock = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
+    category = models.CharField(max_length=50, blank=True, null=True, db_index=True)
+    stock = models.IntegerField(default=0, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['category', 'price']),
+            models.Index(fields=['created_at']),
+        ]
 
     def __str__(self):
         return self.name
@@ -88,24 +95,33 @@ class Order(models.Model):
         ('failed', 'Failed'),
     ]
     
-    order_id = models.CharField(max_length=20, unique=True, editable=False)
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
+    order_id = models.CharField(max_length=20, unique=True, editable=False, db_index=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders', db_index=True)
     customer_name = models.CharField(max_length=255)
-    customer_email = models.EmailField()
+    customer_email = models.EmailField(db_index=True)
     customer_phone = models.CharField(max_length=20, blank=True)
     shipping_address = models.TextField()
     city = models.CharField(max_length=100)
     postal_code = models.CharField(max_length=20, blank=True)
     
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
     payment_method = models.CharField(max_length=50, default='paystack')
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     
     transaction_ref = models.CharField(max_length=100, blank=True, null=True)
     notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['order_id']),
+            models.Index(fields=['user']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['customer_email']),
+        ]
+        ordering = ['-created_at']
     
     def save(self, *args, **kwargs):
         if not self.order_id:
@@ -131,22 +147,29 @@ class Coupon(models.Model):
         ('fixed', 'Fixed Amount (KES)'),
     ]
     
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50, unique=True, db_index=True)
     discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES, default='percentage')
     discount_value = models.DecimalField(max_digits=10, decimal_places=2)
     min_order_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     max_discount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
-    valid_from = models.DateTimeField()
-    valid_to = models.DateTimeField()
+    valid_from = models.DateTimeField(db_index=True)
+    valid_to = models.DateTimeField(db_index=True)
     
     usage_limit = models.IntegerField(default=1)
     used_count = models.IntegerField(default=0)
     per_user_limit = models.IntegerField(default=1)
     
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['is_active', 'valid_from', 'valid_to']),
+        ]
     
     def __str__(self):
         return f"{self.code} - {self.discount_value}{'%' if self.discount_type == 'percentage' else ' KES'}"
@@ -158,14 +181,10 @@ class Coupon(models.Model):
         return (self.is_active and 
                 self.valid_from <= now <= self.valid_to and 
                 self.used_count < self.usage_limit)
-    
-    class Meta:
-        ordering = ['-created_at']
 
 class StoreSettings(models.Model):
     """Store configuration settings"""
     
-    # Store Information
     store_name = models.CharField(max_length=100, default='FlashCart Pro')
     store_email = models.EmailField(default='info@flashcartpro.com')
     store_phone = models.CharField(max_length=20, default='+254 700 123 456')
@@ -173,32 +192,24 @@ class StoreSettings(models.Model):
     store_description = models.TextField(blank=True)
     store_logo = models.URLField(blank=True)
     
-    # Shipping Settings
     free_shipping_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=5000)
     shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=299)
-    
-    # Tax Settings
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=16.00)
     
-    # Payment Settings
     payment_methods = models.JSONField(default=list)
     currency = models.CharField(max_length=3, default='KES')
     
-    # Order Settings
     order_prefix = models.CharField(max_length=10, default='ORD')
     auto_confirm_order = models.BooleanField(default=False)
     
-    # Notification Settings
     send_order_confirmation = models.BooleanField(default=True)
     send_payment_confirmation = models.BooleanField(default=True)
     send_shipping_update = models.BooleanField(default=True)
     
-    # Social Media Links
     facebook_url = models.URLField(blank=True)
     twitter_url = models.URLField(blank=True)
     instagram_url = models.URLField(blank=True)
     
-    # Meta
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
@@ -210,21 +221,26 @@ class StoreSettings(models.Model):
 # ==================== REVIEW MODEL ====================
 class Review(models.Model):
     """Product reviews and ratings"""
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews')
-    rating = models.IntegerField(choices=[(1, '1 Star'), (2, '2 Stars'), (3, '3 Stars'), (4, '4 Stars'), (5, '5 Stars')])
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews', db_index=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews', db_index=True)
+    rating = models.IntegerField(choices=[(1, '1 Star'), (2, '2 Stars'), (3, '3 Stars'), (4, '4 Stars'), (5, '5 Stars')], db_index=True)
     title = models.CharField(max_length=200)
     comment = models.TextField()
     verified_purchase = models.BooleanField(default=False)
     helpful_count = models.IntegerField(default=0)
     helpful_votes = models.ManyToManyField(User, related_name='helpful_reviews', blank=True)
-    is_approved = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    is_approved = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['-created_at']
         unique_together = ['product', 'user']
+        indexes = [
+            models.Index(fields=['product', 'is_approved']),
+            models.Index(fields=['rating']),
+            models.Index(fields=['created_at']),
+        ]
     
     def __str__(self):
         return f"{self.user.email} - {self.product.name} - {self.rating}★"
@@ -232,13 +248,17 @@ class Review(models.Model):
 # ==================== WISHLIST MODEL ====================
 class Wishlist(models.Model):
     """User wishlist items"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wishlist')
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='wishlisted_by')
-    added_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wishlist', db_index=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='wishlisted_by', db_index=True)
+    added_at = models.DateTimeField(auto_now_add=True, db_index=True)
     
     class Meta:
         unique_together = ['user', 'product']
         ordering = ['-added_at']
+        indexes = [
+            models.Index(fields=['user', 'product']),
+            models.Index(fields=['added_at']),
+        ]
     
     def __str__(self):
         return f"{self.user.email} - {self.product.name}"

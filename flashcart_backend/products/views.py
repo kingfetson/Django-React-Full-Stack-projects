@@ -25,6 +25,12 @@ from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import Wishlist
 from .serializers import WishlistSerializer
+
+from django.core.cache import cache
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
+from .utils.cache_utils import CacheManager, cached
+
 logger = logging.getLogger(__name__)
 
 # Import Paystack libraries
@@ -839,3 +845,105 @@ def toggle_wishlist(request, product_id):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+   
+# Cache products list for 1 hour
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@cache_page(60 * 60)  # Cache for 1 hour
+@vary_on_headers('Authorization')  # Vary cache for different users
+def get_products(request):
+    # Try to get from cache
+    cache_key = f"products:list:{request.GET.get('category', 'all')}:{request.GET.get('page', 1)}"
+    products = cache.get(cache_key)
+    
+    if products is None:
+        products = Product.objects.all()
+        serializer = ProductSerializer(products, many=True)
+        products = serializer.data
+        cache.set(cache_key, products, 60 * 60)  # Cache for 1 hour
+    
+    return Response(products)
+
+# Invalidate cache when product is created/updated/deleted
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_product(request):
+    if request.user.role != 'admin' and not request.user.is_superuser:
+        return Response({'error': 'Permission denied'}, status=403)
+    
+    serializer = ProductSerializer(data=request.data)
+    if serializer.is_valid():
+        product = serializer.save(created_by=request.user)
+        # Invalidate products cache
+        cache.delete_pattern("products:*")
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def product_detail(request, product_id):
+    try:
+        product = Product.objects.get(id=product_id)
+    except Product.DoesNotExist:
+        return Response({'error': 'Product not found'}, status=404)
+    
+    if request.method == 'PUT':
+        if request.user.role != 'admin' and not request.user.is_superuser:
+            return Response({'error': 'Permission denied'}, status=403)
+        
+        serializer = ProductSerializer(product, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            # Invalidate specific product cache
+            cache.delete(f"product:{product_id}")
+            cache.delete_pattern("products:*")
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_orders(request):
+    user = request.user
+    
+    if user.role == 'admin' or user.is_superuser:
+        # Use select_related to reduce queries
+        orders = Order.objects.select_related('user').prefetch_related(
+            'items', 'items__product'
+        ).all().order_by('-created_at')
+    else:
+        orders = Order.objects.select_related('user').prefetch_related(
+            'items', 'items__product'
+        ).filter(user=user).order_by('-created_at')
+    
+    serializer = OrderSerializer(orders, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_products(request):
+    # Add pagination for large datasets
+    from django.core.paginator import Paginator
+    
+    products = Product.objects.all().order_by('-created_at')
+    
+    # Pagination
+    page = request.GET.get('page', 1)
+    page_size = request.GET.get('page_size', 20)
+    
+    paginator = Paginator(products, page_size)
+    try:
+        page_products = paginator.page(page)
+    except:
+        page_products = paginator.page(1)
+    
+    serializer = ProductSerializer(page_products, many=True)
+    
+    return Response({
+        'products': serializer.data,
+        'total': paginator.count,
+        'page': int(page),
+        'total_pages': paginator.num_pages,
+        'has_next': page_products.has_next(),
+        'has_previous': page_products.has_previous(),
+    })

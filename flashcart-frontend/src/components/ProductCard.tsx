@@ -51,7 +51,8 @@ export default function ProductCard({ product }: { product: Product }) {
             alt={product.name}
             className="w-full h-full object-cover rounded-lg"
             onError={() => setImgError(true)}
-            loading="lazy"
+            loading="lazy"  // Native lazy loading
+            decoding="async" // Optimize decoding
           />
         </div>
 
