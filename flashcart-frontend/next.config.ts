@@ -23,7 +23,7 @@ const nextConfig = {
   // Enable compression
   compress: true,
   // Enable SWC minification
-  swcMinify: true,
+  //swcMinify: true,
   // Enable React strict mode
   reactStrictMode: true,
 };

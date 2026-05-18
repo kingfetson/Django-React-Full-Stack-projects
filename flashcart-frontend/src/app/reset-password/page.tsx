@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
@@ -16,15 +16,25 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const { resetPassword } = useAuth();
 
-  useEffect(() => {
+  const validateToken = useCallback(() => {
     const tokenParam = searchParams.get("token");
     if (!tokenParam) {
       toast.error("Invalid reset link");
-      router.push("/forgot-password");
-    } else {
-      setToken(tokenParam);
+      setTimeout(() => {
+        router.push("/forgot-password");
+      }, 2000);
+      return false;
     }
+    setToken(tokenParam);
+    return true;
   }, [searchParams, router]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      validateToken();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [validateToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,11 +49,21 @@ export default function ResetPasswordPage() {
       return;
     }
     
+    if (!token) {
+      toast.error("Invalid reset token");
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      await resetPassword(token!, password);
-    } catch (error) {
-      // Error handled in auth context
+      await resetPassword(token, password);
+      toast.success("Password reset successfully!");
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to reset password";
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +89,11 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                 required
+                minLength={8}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Must be at least 8 characters
+              </p>
             </div>
             
             <div>
@@ -83,12 +107,17 @@ export default function ResetPasswordPage() {
                 className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                 required
               />
+              {confirmPassword && password !== confirmPassword && (
+                <p className="text-xs text-red-500 mt-1">
+                  Passwords do not match
+                </p>
+              )}
             </div>
             
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-50"
+              disabled={isLoading || !password || !confirmPassword || password !== confirmPassword}
+              className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? "Resetting..." : "Reset Password"}
             </button>

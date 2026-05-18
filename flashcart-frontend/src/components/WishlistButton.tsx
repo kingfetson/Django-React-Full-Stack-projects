@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
+
+// Define the Wishlist item type
+interface WishlistItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  added_at: string;
+}
 
 interface WishlistButtonProps {
   productId: number;
@@ -14,25 +22,32 @@ export default function WishlistButton({ productId, className = "" }: WishlistBu
   const [loading, setLoading] = useState(false);
   const { user, token } = useAuth();
 
-  useEffect(() => {
-    if (user) {
-      checkWishlistStatus();
-    }
-  }, [productId, user]);
-
-  const checkWishlistStatus = async () => {
+  const checkWishlistStatus = useCallback(async () => {
+    if (!user || !token) return;
+    
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/api/wishlist/`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
-      const data = await response.json();
-      const exists = data.some((item: any) => item.product_id === productId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data: WishlistItem[] = await response.json();
+      const exists = data.some((item: WishlistItem) => item.product_id === productId);
       setIsInWishlist(exists);
     } catch (error) {
       console.error("Error checking wishlist:", error);
     }
-  };
+  }, [user, token, productId]);
+
+  useEffect(() => {
+    if (user) {
+      checkWishlistStatus();
+    }
+  }, [user, checkWishlistStatus]);
 
   const toggleWishlist = async () => {
     if (!user) {
@@ -47,6 +62,7 @@ export default function WishlistButton({ productId, className = "" }: WishlistBu
         method: "POST",
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
@@ -54,7 +70,7 @@ export default function WishlistButton({ productId, className = "" }: WishlistBu
       
       if (response.ok) {
         setIsInWishlist(data.added);
-        toast.success(data.message);
+        toast.success(data.message || (data.added ? "Added to wishlist" : "Removed from wishlist"));
       } else {
         toast.error(data.error || "Failed to update wishlist");
       }
@@ -70,10 +86,12 @@ export default function WishlistButton({ productId, className = "" }: WishlistBu
     <button
       onClick={toggleWishlist}
       disabled={loading}
-      className={`${className} transition-transform hover:scale-110 disabled:opacity-50`}
+      className={`${className} transition-transform hover:scale-110 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500 rounded-full`}
       aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
     >
-      {isInWishlist ? "❤️" : "🤍"}
+      <span className="text-2xl">
+        {loading ? "⏳" : (isInWishlist ? "❤️" : "🤍")}
+      </span>
     </button>
   );
 }

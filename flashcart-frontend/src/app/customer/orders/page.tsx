@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import CustomerLayout from "@/components/CustomerLayout";
 import { useAuth } from "@/context/AuthContext";
@@ -19,11 +19,12 @@ export default function CustomerOrders() {
   const [loading, setLoading] = useState(true);
   const { token } = useAuth();
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/api/orders/`, {
@@ -36,9 +37,13 @@ export default function CustomerOrders() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]); // Add token as dependency
 
-  const getStatusColor = (status: string) => {
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]); // Add fetchOrders to dependency array
+
+  const getStatusColor = (status: string): string => {
     const colors: Record<string, string> = {
       pending: "bg-yellow-100 text-yellow-800",
       processing: "bg-blue-100 text-blue-800",
@@ -47,6 +52,12 @@ export default function CustomerOrders() {
       cancelled: "bg-red-100 text-red-800",
     };
     return colors[status] || "bg-gray-100 text-gray-800";
+  };
+
+  const getPaymentStatusColor = (status: string): string => {
+    return status === 'paid' 
+      ? 'bg-green-100 text-green-800' 
+      : 'bg-yellow-100 text-yellow-800';
   };
 
   if (loading) {
@@ -65,8 +76,8 @@ export default function CustomerOrders() {
         <div className="bg-white rounded-lg shadow-md p-12 text-center">
           <div className="text-6xl mb-4">📦</div>
           <h3 className="text-xl font-semibold mb-2">No orders yet</h3>
-          <p className="text-gray-500 mb-6">You haven't placed any orders yet.</p>
-          <Link href="/" className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700">
+          <p className="text-gray-500 mb-6">You have not placed any orders yet.</p>
+          <Link href="/" className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition-colors">
             Start Shopping
           </Link>
         </div>
@@ -86,22 +97,25 @@ export default function CustomerOrders() {
               </thead>
               <tbody>
                 {orders.map((order) => (
-                  <tr key={order.order_id} className="border-b hover:bg-gray-50">
+                  <tr key={order.order_id} className="border-b hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4 font-mono text-sm">{order.order_id}</td>
                     <td className="py-3 px-4">{new Date(order.created_at).toLocaleDateString()}</td>
-                    <td className="py-3 px-4 text-right">KES {parseFloat(order.total_amount).toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-semibold">KES {parseFloat(order.total_amount).toLocaleString()}</td>
                     <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(order.status)}`}>
-                        {order.status}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${order.payment_status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                        {order.payment_status}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(order.payment_status)}`}>
+                        {order.payment_status === 'paid' ? 'Paid' : 'Pending'}
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <Link href={`/order-confirmation?order_id=${order.order_id}`} className="text-orange-600 hover:underline text-sm">
+                      <Link 
+                        href={`/order-confirmation?order_id=${order.order_id}`} 
+                        className="text-orange-600 hover:text-orange-700 hover:underline text-sm transition-colors"
+                      >
                         View Details
                       </Link>
                     </td>

@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
   ArcElement,
+  TooltipItem,
 } from 'chart.js';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import AdminLayout from "@/components/AdminLayout";
@@ -31,6 +32,7 @@ ChartJS.register(
   ArcElement
 );
 
+// Define proper types
 interface Order {
   id: number;
   order_id: string;
@@ -39,11 +41,37 @@ interface Order {
   created_at: string;
 }
 
+interface DailyData {
+  date: string;
+  amount: number;
+}
+
+interface WeeklyData {
+  week: string;
+  amount: number;
+}
+
+interface MonthlyData {
+  month: string;
+  amount: number;
+}
+
+interface YearlyData {
+  year: string;
+  amount: number;
+}
+
 interface RevenueData {
-  daily: { date: string; amount: number }[];
-  weekly: { week: string; amount: number }[];
-  monthly: { month: string; amount: number }[];
-  yearly: { year: string; amount: number }[];
+  daily: DailyData[];
+  weekly: WeeklyData[];
+  monthly: MonthlyData[];
+  yearly: YearlyData[];
+}
+
+interface TopProduct {
+  name: string;
+  sales: number;
+  revenue: number;
 }
 
 interface Stats {
@@ -53,11 +81,27 @@ interface Stats {
   completedOrders: number;
   pendingOrders: number;
   cancelledOrders: number;
-  topProducts: { name: string; sales: number; revenue: number }[];
+  topProducts: TopProduct[];
+}
+
+type PeriodType = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+// Define chart data type
+interface ChartData {
+  labels: string[];
+  datasets: {
+    label: string;
+    data: number[];
+    borderColor?: string;
+    backgroundColor?: string | string[];
+    fill?: boolean;
+    tension?: number;
+    borderWidth?: number;
+  }[];
 }
 
 export default function AdminRevenue() {
-  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
+  const [period, setPeriod] = useState<PeriodType>('daily');
   const [revenueData, setRevenueData] = useState<RevenueData>({
     daily: [],
     weekly: [],
@@ -166,7 +210,7 @@ export default function AdminRevenue() {
       const averageOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
       
       // Top products (simplified - in production, you'd need a proper endpoint)
-      const topProducts = [
+      const topProducts: TopProduct[] = [
         { name: "Wireless Headphones", sales: 45, revenue: 15750 },
         { name: "Smart Watch", sales: 32, revenue: 12800 },
         { name: "Laptop Stand", sales: 28, revenue: 4200 },
@@ -190,8 +234,8 @@ export default function AdminRevenue() {
         cancelledOrders,
         topProducts,
       });
-    } catch (error) {
-      console.error("Error fetching revenue data:", error);
+    } catch (err) {
+      console.error("Error fetching revenue data:", err);
       toast.error("Failed to load revenue data");
     } finally {
       setLoading(false);
@@ -202,7 +246,7 @@ export default function AdminRevenue() {
     fetchRevenueData();
   }, [fetchRevenueData]);
 
-  const getChartData = () => {
+  const getChartData = (): ChartData => {
     switch (period) {
       case 'daily':
         return {
@@ -262,7 +306,8 @@ export default function AdminRevenue() {
     }]
   });
 
-  const chartOptions = {
+  // Separate options for Line and Bar charts
+  const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -271,8 +316,8 @@ export default function AdminRevenue() {
       },
       tooltip: {
         callbacks: {
-          label: (context: any) => {
-            return `KES ${context.parsed.y.toLocaleString()}`;
+          label: (context: TooltipItem<'line'>) => {
+            return `KES ${(context.parsed.y || 0).toLocaleString()}`;
           }
         }
       }
@@ -280,7 +325,31 @@ export default function AdminRevenue() {
     scales: {
       y: {
         ticks: {
-          callback: (value: any) => `KES ${value.toLocaleString()}`
+          callback: (value: number | string) => `KES ${Number(value).toLocaleString()}`
+        }
+      }
+    }
+  };
+
+  const barChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: TooltipItem<'bar'>) => {
+            return `KES ${(context.parsed.y || 0).toLocaleString()}`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        ticks: {
+          callback: (value: number | string) => `KES ${Number(value).toLocaleString()}`
         }
       }
     }
@@ -351,10 +420,10 @@ export default function AdminRevenue() {
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h3 className="font-semibold text-lg mb-4">Revenue Trend</h3>
         <div className="h-96">
-          {period === 'weekly' ? (
-            <Bar data={getChartData()} options={chartOptions} />
+          {period === 'weekly' || period === 'yearly' ? (
+            <Bar data={getChartData()} options={barChartOptions} />
           ) : (
-            <Line data={getChartData()} options={chartOptions} />
+            <Line data={getChartData()} options={lineChartOptions} />
           )}
         </div>
       </div>

@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo } from "react";
 import HeroBanner from "../components/HeroBanner";
 import ProductCard from "../components/ProductCard";
 import ProductSkeleton from "../components/ProductSkeleton";
-import Layout from "@/components/Layout";
+// Remove Layout import since it's in root layout
+// import Layout from "@/components/Layout";
 
 // Add the Product type definition
 type Product = {
@@ -40,10 +41,10 @@ export default function Home() {
         
         const data = await response.json();
         setProducts(Array.isArray(data) ? data : []);
-        setLoading(false);
       } catch (err) {
         console.error("Fetch error:", err);
         setError(err instanceof Error ? err.message : 'Failed to connect to server');
+      } finally {
         setLoading(false);
       }
     };
@@ -52,7 +53,6 @@ export default function Home() {
   }, []);
 
   const filteredProducts = useMemo(() => {
-    // Use let instead of const since we need to modify it
     let result = [...products];
 
     if (searchTerm && searchTerm.trim()) {
@@ -84,39 +84,35 @@ export default function Home() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="container mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {[...Array(8)].map((_, i) => (
-              <ProductSkeleton key={i} />
-            ))}
-          </div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {[...Array(8)].map((_, i) => (
+            <ProductSkeleton key={i} />
+          ))}
         </div>
-      </Layout>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Layout>
-        <div className="flex items-center justify-center py-20">
-          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md text-center">
-            <h2 className="text-2xl font-bold mb-4">Connection Error</h2>
-            <p className="text-red-600 mb-4">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-black text-white px-6 py-2 rounded-lg"
-            >
-              Retry
-            </button>
-          </div>
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-white rounded-lg shadow-xl p-8 max-w-md text-center">
+          <h2 className="text-2xl font-bold mb-4">Connection Error</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            Retry
+          </button>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="container mx-auto px-4 py-8">
         <HeroBanner />
 
@@ -126,11 +122,11 @@ export default function Home() {
               type="text"
               placeholder="Search products..."
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <select
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               {categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
@@ -138,7 +134,7 @@ export default function Home() {
             </select>
             <select
               onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 border rounded-lg"
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="default">Sort by: Default</option>
               <option value="price_asc">Price: Low to High</option>
@@ -164,6 +160,6 @@ export default function Home() {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 }
