@@ -1,31 +1,25 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
 
-# Redis Cache Configuration - Remove HiredisParser
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Cache Configuration - Using local memory instead of Redis
 CACHES = {
     'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': 'redis://127.0.0.1:6379/1',
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'CONNECTION_POOL_CLASS': 'redis.BlockingConnectionPool',
-            'CONNECTION_POOL_CLASS_KWARGS': {
-                'max_connections': 50,
-                'timeout': 20,
-            },
-            'MAX_CONNECTIONS': 1000,
-            'PICKLE_VERSION': -1,
-        },
-        'KEY_PREFIX': 'flashcart',
-        'TIMEOUT': 3600,
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
 }
 
-# Session caching (optional)
-SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
-SESSION_CACHE_ALIAS = 'default'
+# Session caching - Commented out to use database sessions
+# SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+# SESSION_CACHE_ALIAS = 'default'
 
 # Cache time to live for different data types
 CACHE_TTL = {
@@ -35,16 +29,13 @@ CACHE_TTL = {
     'users': 3600,         # 1 hour
 }
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-rdn6nvkua)8wi##-k6s_+@!=ohgs4o=qrh4ta^n^s$qudp_pf)"
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-rdn6nvkua)8wi##-k6s_+@!=ohgs4o=qrh4ta^n^s$qudp_pf)')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -82,6 +73,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,  # Number of products per page
 }
 
 # JWT Settings
@@ -94,11 +87,16 @@ SIMPLE_JWT = {
 }
 
 # Email settings (for development)
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'noreply@flashcartpro.com'
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@flashcartpro.com')
 
 # Frontend URL
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://didactic-umbrella-x54jjv4v7r6h6qwq-3000.app.github.dev')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://127.0.0.1:3000')
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
@@ -111,10 +109,7 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:8000',
     'https://localhost:8000',
     'http://127.0.0.1:8000',
-    'https://didactic-umbrella-x54jjv4v7r6h6qwq-8000.app.github.dev',
-    'https://didactic-umbrella-x54jjv4v7r6h6qwq-3000.app.github.dev',
-    'https://*.preview.app.github.dev',
-    'https://*.app.github.dev',
+    FRONTEND_URL,
 ]
 
 # CSRF settings
@@ -123,10 +118,7 @@ CSRF_TRUSTED_ORIGINS = [
     'https://localhost:3000',
     'http://localhost:8000',
     'https://localhost:8000',
-    'https://didactic-umbrella-x54jjv4v7r6h6qwq-8000.app.github.dev',
-    'https://didactic-umbrella-x54jjv4v7r6h6qwq-3000.app.github.dev',
-    'https://*.preview.app.github.dev',
-    'https://*.app.github.dev',
+    FRONTEND_URL,
 ]
 
 CSRF_COOKIE_SECURE = False
@@ -168,13 +160,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "flashcart_backend.wsgi.application"
 
-# Database
+# Database - Use SQLite for development, can be overridden by DATABASE_URL
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+# Optional: Use PostgreSQL with DATABASE_URL
+# import dj_database_url
+# DATABASES['default'] = dj_database_url.config(default='sqlite:///db.sqlite3')
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -200,6 +196,10 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Cloudinary Configuration

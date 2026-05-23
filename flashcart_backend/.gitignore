@@ -1,0 +1,9 @@
+# Add to your .gitignore file
+.env
+.env.*
+!.env.example
+*.pyc
+__pycache__/
+db.sqlite3
+staticfiles/
+media/
